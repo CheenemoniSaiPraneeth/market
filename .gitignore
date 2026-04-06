@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+harvester_run.py
+today_info_run.py
+llm_run.py
+company_today.json
+charith.json
+companies_suii.json
+ai_text.json
+charith_text.json
