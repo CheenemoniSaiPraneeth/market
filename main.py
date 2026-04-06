@@ -66,7 +66,7 @@ BRIEFS_FILE     = "briefs.json"
 HISTORY_FILE    = "briefs_history.json"
 STATUS_FILE     = "run_status.json"      # written for frontend to read
 
-MAX_LINKS_FOR_LLM = 30  # cap passed to llm step
+MAX_LINKS_FOR_LLM = 100  # cap passed to llm step
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
 
