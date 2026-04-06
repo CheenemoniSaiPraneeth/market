@@ -1,0 +1,98 @@
+name: Daily Biotech Intelligence Pipeline
+
+on:
+  schedule:
+    # Runs at 02:00 UTC daily (7:30 AM IST)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      modality:
+        description: 'Override modality (bispecific | monoclonal | molecular glue | gene editing)'
+        required: false
+        default: ''
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      # ── 1. Checkout repo ──────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 2. Set up Python ─────────────────────────────────────────────────
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ── 3. Install Python deps ────────────────────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install flask gunicorn requests aiohttp beautifulsoup4 lxml playwright
+
+      # ── 4. Install Playwright browsers ───────────────────────────────────
+      - name: Install Playwright chromium
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+
+      # ── 5. Restore master URL database (empty.json) ──────────────────────
+      - name: Restore master URL cache
+        uses: actions/cache@v4
+        with:
+          path: empty.json
+          key: master-url-db-${{ github.run_number }}
+          restore-keys: |
+            master-url-db-
+
+      # ── 6. Run the pipeline ───────────────────────────────────────────────
+      - name: Run main.py pipeline
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          if [ -n "${{ github.event.inputs.modality }}" ]; then
+            python main.py --modality "${{ github.event.inputs.modality }}"
+          else
+            python main.py
+          fi
+
+      # ── 7. Commit updated output files back to repo ───────────────────────
+      - name: Commit updated briefs and history
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -f briefs.json briefs_history.json run_status.json empty.json || true
+
+          # Only commit if something changed
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            TODAY=$(date +%Y-%m-%d)
+            MODALITY=$(python -c "
+          from main import get_today_modality
+          import json
+          m = get_today_modality()
+          print(m['label'])
+          " 2>/dev/null || echo "Unknown")
+            git commit -m "Auto: ${TODAY} — ${MODALITY} intelligence brief"
+            git push
+          fi
+
+      # ── 8. Upload artifacts for inspection ───────────────────────────────
+      - name: Upload pipeline outputs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pipeline-output-${{ github.run_number }}
+          path: |
+            briefs.json
+            briefs_history.json
+            run_status.json
+            ai_text.json
+          retention-days: 7
