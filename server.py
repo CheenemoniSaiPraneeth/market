@@ -51,26 +51,66 @@ def load_json(path: str, default=None):
     except Exception:
         return default
 
+# Each modality has EXCLUSIVE keywords that ONLY match that modality.
+# No keyword appears in more than one bucket to prevent cross-matching.
+MODALITY_ALIASES = {
+    "bispecific antibodies": {
+        "match_keys": ["bispecific"],           # words that must appear in history key
+        "exclude_keys": [],
+    },
+    "monoclonal antibodies": {
+        "match_keys": ["monoclonal"],           # ONLY "monoclonal" — NOT adc/antibody-drug
+        "exclude_keys": ["adc", "bispecific", "drug conjugate"],
+    },
+    "molecular glues": {
+        "match_keys": ["molecular glue", "molecular_glue"],
+        "exclude_keys": [],
+    },
+    "gene editing": {
+        "match_keys": ["gene editing", "gene_editing", "crispr", "cas9"],
+        "exclude_keys": [],
+    },
+    "antibody-drug conjugates": {
+        "match_keys": ["antibody-drug", "adc", "drug conjugate"],
+        "exclude_keys": [],
+    },
+}
+
 def _modality_matches(history_key: str, query: str) -> bool:
     """
-    Fuzzy match: does the history key (e.g. 'Antibody-Drug Conjugates (ADCs)')
-    correspond to the requested modality label (e.g. 'Monoclonal Antibodies')?
+    Strict match: history_key from briefs_history.json vs requested modality label.
+    Uses exclusive keyword buckets to prevent cross-modality false matches.
     """
-    hk = history_key.lower()
+    hk = history_key.lower().strip()
     q  = query.lower().strip()
-    if q in hk or hk in q:
+
+    # Exact or substring match first
+    if q == hk:
         return True
-    # keyword aliases
-    aliases = {
-        "bispecific antibodies":  ["bispecific"],
-        "monoclonal antibodies":  ["monoclonal", "mab", "antibody-drug", "adc"],
-        "molecular glues":        ["molecular glue", "molecular_glue"],
-        "gene editing":           ["gene editing", "gene_editing", "crispr"],
-    }
-    for label, keys in aliases.items():
-        if q == label or any(k in q for k in keys):
-            if any(k in hk for k in keys) or label in hk:
-                return True
+
+    # Look up which alias bucket the QUERY belongs to
+    query_bucket = None
+    for label, cfg in MODALITY_ALIASES.items():
+        if q == label or any(k in q for k in cfg["match_keys"]):
+            query_bucket = label
+            break
+
+    if query_bucket is None:
+        # Unknown query — fall back to simple substring
+        return q in hk
+
+    cfg = MODALITY_ALIASES[query_bucket]
+
+    # history key must NOT contain any exclusion keywords
+    if any(ex in hk for ex in cfg["exclude_keys"]):
+        return False
+
+    # history key must match the bucket label OR contain a match key
+    if query_bucket in hk:
+        return True
+    if any(k in hk for k in cfg["match_keys"]):
+        return True
+
     return False
 
 def _get_latest_modality_items(modality_label: str) -> list:
@@ -116,8 +156,12 @@ def api_graph():
         if items:
             raw = {"modality_intelligence": items}
         else:
-            # fallback: try briefs.json
-            raw = load_json(BRIEFS_FILE, {})
+            # No data for this modality yet — return empty, do NOT fall back to ADC
+            return no_cache(make_response(jsonify({
+                "nodes": [], "edges": [], "meta": {},
+                "no_data": True,
+                "message": f"No data yet for '{modality_param}'. Run the pipeline first."
+            })))
     else:
         raw = load_json(BRIEFS_FILE, {})
 
@@ -230,7 +274,7 @@ def api_counts():
             "label": "Monoclonal Antibodies",
             "color": "#4f9eff", "icon": "⊕",
             "tags":  ["monoclonal", "mAb", "therapeutic antibody"],
-            "keys":  ["monoclonal", "mab", "antibody-drug", "adc"],
+            "keys":  ["monoclonal"],
         },
         {
             "label": "Molecular Glues",
