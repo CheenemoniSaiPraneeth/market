@@ -36,7 +36,7 @@ from pathlib import Path
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 INVOKE_URL      = "https://integrate.api.nvidia.com/v1/chat/completions"
-API_KEY         = "Bearer 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"
+API_KEY         = "Bearer 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"
 MODEL           = "qwen/qwen3.5-122b-a10b"
 MAX_RETRIES     = 3
 BACKOFF_BASE    = 1      # seconds — attempt 1: no wait, 2: 1s, 3: 2s, 4: 4s
