@@ -1,8 +1,7 @@
 {
-  "stage": "complete",
+  "stage": "done_no_articles",
   "modality": "Monoclonal Antibodies",
   "keyword": "monoclonal",
-  "last_updated": "2026-04-06 14:00:25",
-  "briefs_ready": true,
-  "links_processed": 59
+  "last_updated": "2026-04-07 04:24:13",
+  "links_processed": 0
 }
