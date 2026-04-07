@@ -34,9 +34,9 @@ from pathlib import Path
 
 MODALITY_SCHEDULE = {
     0: {"name": "bispecific antibodies",  "keyword": "bispecific",     "label": "Bispecific Antibodies"},
-     1: {"name": "gene editing",           "keyword": "gene editing",   "label": "Gene Editing"},
+     1: {"name": "gene editing",           "keyword": "geneediting",   "label": "Gene Editing"},
     2: {"name": "monoclonal antibodies",  "keyword": "monoclonal",     "label": "Monoclonal Antibodies"},
-    3: {"name": "molecular glues",        "keyword": "molecular glue", "label": "Molecular Glues"},
+    3: {"name": "molecular glues",        "keyword": "molecularglue", "label": "Molecular Glues"},
     4: {"name": "gene editing",           "keyword": "gene editing",   "label": "Gene Editing"},
     5: {"name": "bispecific antibodies",  "keyword": "bispecific",     "label": "Bispecific Antibodies"},
     6: {"name": "monoclonal antibodies",  "keyword": "monoclonal",     "label": "Monoclonal Antibodies"},
