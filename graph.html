@@ -489,9 +489,27 @@ if (_modalityParam) {
 fetch(_apiUrl)
   .then(r => r.json())
   .then(data => {
-    if (data.error && (!data.nodes || data.nodes.length === 0)) {
-      document.querySelector('.loading-text').textContent =
-        `No data yet for "${_modalityParam || 'this modality'}" — run the pipeline first.`;
+    if (data.no_data || (!data.nodes || data.nodes.length === 0)) {
+      const msg  = data.message || `No data yet for "${_modalityParam || 'this modality'}"`;
+      const load = document.getElementById('loading');
+      load.innerHTML = `
+        <div style="text-align:center;max-width:400px;padding:0 20px">
+          <div style="font-size:28px;margin-bottom:16px;opacity:0.4">◈</div>
+          <div style="font-family:'Space Mono',monospace;font-size:13px;
+                      color:#e8edf5;margin-bottom:8px;letter-spacing:0.04em">
+            ${_modalityParam || 'This modality'}
+          </div>
+          <div style="font-size:13px;color:#6b7a94;line-height:1.6;margin-bottom:24px">
+            ${msg}
+          </div>
+          <a href="/" style="display:inline-flex;align-items:center;gap:6px;
+                             background:#e879f915;border:1px solid #e879f940;
+                             color:#e879f9;padding:8px 18px;border-radius:6px;
+                             font-size:12px;text-decoration:none;">
+            ← Back to Dashboard
+          </a>
+        </div>`;
+      load.style.opacity = '1';
       return;
     }
     allNodes = data.nodes;
