@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ADC Knowledge Graph</title>
+<title>Knowledge Graph</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -472,15 +472,37 @@ let activeFilter = 'all';
 let selectedId = null;
 
 // ── FETCH DATA ────────────────────────────────────────────────────────────────
-fetch('/api/graph')
+// Read ?modality= from URL so each card on the dashboard opens its own graph
+const _urlParams   = new URLSearchParams(window.location.search);
+const _modalityParam = _urlParams.get('modality') || '';
+const _apiUrl = _modalityParam
+  ? `/api/graph?modality=${encodeURIComponent(_modalityParam)}`
+  : '/api/graph';
+
+// Update page title + logo text with modality name
+if (_modalityParam) {
+  document.title = _modalityParam + ' — Knowledge Graph';
+  const logoEl = document.querySelector('.logo');
+  if (logoEl) logoEl.innerHTML = `PHARMA<span>.</span>${_modalityParam.toUpperCase().replace(/ /g,'&nbsp;')}`;
+}
+
+fetch(_apiUrl)
   .then(r => r.json())
   .then(data => {
+    if (data.error && (!data.nodes || data.nodes.length === 0)) {
+      document.querySelector('.loading-text').textContent =
+        `No data yet for "${_modalityParam || 'this modality'}" — run the pipeline first.`;
+      return;
+    }
     allNodes = data.nodes;
     allEdges = data.edges;
     graphMeta = data.meta || {};
     document.getElementById('loading').style.opacity = '0';
     setTimeout(() => document.getElementById('loading').style.display = 'none', 400);
-    document.getElementById('nodeCount').textContent = `${allNodes.length} nodes · ${allEdges.length} edges`;
+    // Show modality name from meta if available
+    const modalityLabel = graphMeta.modality_name || _modalityParam || '—';
+    document.getElementById('nodeCount').textContent =
+      `${modalityLabel}  ·  ${allNodes.length} nodes · ${allEdges.length} edges`;
     buildFilters();
     buildGraph();
   })
