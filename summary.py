@@ -5,6 +5,11 @@ Reads extracted article text (text.json), calls the LLM with guaranteed
 JSON output, validates the schema, and writes structured modality intelligence
 to a clean JSON file.
 
+Pipeline:
+1. Chunk articles (15 each) → per-chunk modality intelligence
+2. Merge all chunk results into one unified report
+3. Validate schema and write output
+
 After each run, results are also appended to briefs_history.json:
 
   {
@@ -30,13 +35,13 @@ from datetime import datetime
 from pathlib import Path
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-import os
 INVOKE_URL      = "https://integrate.api.nvidia.com/v1/chat/completions"
 API_KEY         = "Bearer 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"
 MODEL           = "qwen/qwen3.5-122b-a10b"
 MAX_RETRIES     = 3
 BACKOFF_BASE    = 1      # seconds — attempt 1: no wait, 2: 1s, 3: 2s, 4: 4s
 REQUEST_TIMEOUT = 180    # seconds per attempt
+CHUNK_SIZE      = 15     # articles per chunk
 
 BRIEFS_HISTORY_FILE = "briefs_history.json"
 
@@ -167,9 +172,35 @@ OUTPUT FORMAT (strict JSON, nothing else):
 }
 """
 
-# ── PROMPT BUILDER ────────────────────────────────────────────────────────────
+# ── MERGE SYSTEM PROMPT ───────────────────────────────────────────────────────
 
-def build_prompt(articles: list, query: str) -> str | None:
+MERGE_SYSTEM_PROMPT = """You are merging multiple structured modality intelligence JSON outputs into one unified report.
+
+STRICT MERGE RULES:
+- Return ONLY JSON in the exact same schema as the input chunks.
+- ZERO signal loss — preserve ALL insights from ALL chunks.
+- If the same modality appears in multiple chunks, merge into ONE entry and APPEND all unique insights.
+- For list fields (signals, evidence, deals, key_players, target_companies, etc): combine all entries, remove only exact duplicates.
+- For string fields (current_state, trend, market_character, stage): concatenate with a separator " | " if different content exists.
+- Do NOT summarize, compress, or drop any information.
+- Do NOT hallucinate new content.
+- Output must be information-dense with every field preserved.
+
+OUTPUT FORMAT (strict JSON, nothing else):
+{
+  "modality_intelligence": [ ... ]
+}
+"""
+
+# ── CHUNKING ──────────────────────────────────────────────────────────────────
+
+def chunk_articles(articles, chunk_size=CHUNK_SIZE):
+    for i in range(0, len(articles), chunk_size):
+        yield articles[i:i + chunk_size]
+
+# ── PROMPT BUILDERS ───────────────────────────────────────────────────────────
+
+def build_chunk_prompt(articles: list, query: str) -> str | None:
     sections = []
 
     for i, art in enumerate(articles, 1):
@@ -199,13 +230,25 @@ def build_prompt(articles: list, query: str) -> str | None:
         + "\n\n".join(sections)
     )
 
+
+def build_merge_prompt(chunk_results: list, query: str) -> str:
+    """Build a prompt to merge multiple chunk JSON outputs into one."""
+    all_chunks = "\n\n".join(chunk_results)
+    return (
+        f"Query focus: {query}\n\n"
+        f"Below are {len(chunk_results)} structured modality intelligence outputs "
+        f"from different article chunks.\n"
+        f"Merge them into ONE unified intelligence report with ZERO signal loss.\n\n"
+        f"{all_chunks}"
+    )
+
 # ── LLM CALL ─────────────────────────────────────────────────────────────────
 
-def call_llm(user_prompt: str) -> str:
+def call_llm(system_prompt: str, user_prompt: str) -> str:
     payload = {
         "model":   MODEL,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
         ],
         "max_tokens":      16384,
@@ -282,6 +325,54 @@ def call_llm(user_prompt: str) -> str:
         f"LLM call failed after {MAX_RETRIES} attempts. Last error: {last_error}"
     )
 
+# ── CHUNK PROCESSING ──────────────────────────────────────────────────────────
+
+def generate_chunk_results(articles: list, query: str) -> list[str]:
+    """Process articles in chunks of CHUNK_SIZE, return list of raw JSON strings."""
+    chunks = list(chunk_articles(articles, CHUNK_SIZE))
+    print(f"[INFO] Total article chunks : {len(chunks)}")
+
+    results = []
+    for idx, chunk in enumerate(chunks, 1):
+        print(f"\n[INFO] Processing chunk {idx}/{len(chunks)} ({len(chunk)} articles)...")
+        print("─" * 60)
+
+        prompt = build_chunk_prompt(chunk, query)
+        if not prompt:
+            print(f"[WARN] Chunk {idx}: no valid article bodies — skipping")
+            continue
+
+        try:
+            raw = call_llm(SYSTEM_PROMPT, prompt)
+            if raw:
+                results.append(raw)
+        except RuntimeError as e:
+            print(f"[ERROR] Chunk {idx} failed: {e} — skipping")
+
+    return results
+
+
+def merge_chunk_results(chunk_results: list[str], query: str) -> str:
+    """
+    If only one chunk result exists, return it directly.
+    Otherwise send all chunk results to the LLM for merging.
+    """
+    if len(chunk_results) == 1:
+        print("\n[INFO] Single chunk — skipping merge step.")
+        return chunk_results[0]
+
+    print(f"\n[INFO] Merging {len(chunk_results)} chunk results...\n")
+    print("─" * 60)
+
+    merge_prompt = build_merge_prompt(chunk_results, query)
+
+    try:
+        merged = call_llm(MERGE_SYSTEM_PROMPT, merge_prompt)
+        return merged
+    except RuntimeError as e:
+        print(f"[ERROR] Merge failed: {e} — falling back to first chunk result")
+        return chunk_results[0]
+
 # ── JSON PARSER ───────────────────────────────────────────────────────────────
 
 def parse_llm_response(raw: str) -> list:
@@ -323,7 +414,6 @@ REQUIRED_MODALITY_KEYS = {
 }
 
 def _ensure_str_list(obj, key):
-    """Ensure obj[key] is a list of strings; coerce dicts to their first string value."""
     val = obj.get(key, [])
     if not isinstance(val, list):
         obj[key] = []
@@ -341,13 +431,6 @@ def _ensure_str_list(obj, key):
 
 
 def _normalize_player_list(raw_list: list) -> list:
-    """
-    Accept either:
-      - ["Company A", "Company B"]          (legacy plain strings)
-      - [{"company_name": "...", "reasoning": "..."}]  (new object format)
-    Returns a clean list of {"company_name": str, "reasoning": str} objects.
-    Plain strings get an empty reasoning field.
-    """
     result = []
     for entry in raw_list:
         if isinstance(entry, str) and entry.strip():
@@ -382,7 +465,7 @@ def validate_items(raw_items: list) -> tuple[list, int]:
             dropped += 1
             continue
 
-        # ── collaborations_and_deals ──────────────────────────────────────────
+        # collaborations_and_deals
         collab = item.get("collaborations_and_deals", {})
         if not isinstance(collab, dict):
             print(f"[VALIDATE] Item {idx} ({modality_name}): collaborations_and_deals not a dict — dropped")
@@ -398,25 +481,25 @@ def validate_items(raw_items: list) -> tuple[list, int]:
             except (TypeError, ValueError):
                 item["collaborations_and_deals"]["total_number_of_deals"] = len(collab.get("deals", []))
 
-        # ── key_players: normalize major/emerging to object lists ─────────────
+        # key_players
         kp = item.get("key_players", {})
         if isinstance(kp, dict):
             kp["major"]    = _normalize_player_list(kp.get("major", []))
             kp["emerging"] = _normalize_player_list(kp.get("emerging", []))
             _ensure_str_list(kp, "roles")
 
-        # ── risks ──────────────────────────────────────────────────────────────
+        # risks
         risks = item.get("risks", {})
         if isinstance(risks, dict):
             _ensure_str_list(risks, "key_risks")
 
-        # ── bottlenecks ────────────────────────────────────────────────────────
+        # bottlenecks
         bn = item.get("bottlenecks", {})
         if isinstance(bn, dict):
             _ensure_str_list(bn, "technical")
             _ensure_str_list(bn, "business")
 
-        # ── collaboration_opportunities_for_startup ────────────────────────────
+        # collaboration_opportunities_for_startup
         collab_opps = item.get("collaboration_opportunities_for_startup", {})
         if isinstance(collab_opps, dict):
             if not isinstance(collab_opps.get("target_companies", []), list):
@@ -568,28 +651,37 @@ def main():
     if skipped:
         print(f"[INFO] Skipped  : {skipped} (no body text)")
     print(f"[INFO] Query    : {args.query}")
+    print(f"[INFO] Chunk sz : {CHUNK_SIZE} articles per chunk\n")
 
     if not valid_articles:
         sys.exit("[WARN] No valid articles found.")
 
-    prompt = build_prompt(valid_articles, args.query)
-    if not prompt:
-        sys.exit("[WARN] Prompt generation failed.")
+    # ── STEP 1: Process articles in chunks of 15 ─────────────────────────────
+    print("[INFO] Generating per-chunk modality intelligence...\n")
+    print("─" * 60)
 
-    print(f"[INFO] Sending {len(valid_articles)} articles to LLM...")
-    try:
-        raw_response = call_llm(prompt)
-    except RuntimeError as e:
-        sys.exit(f"[FATAL] {e}")
+    chunk_results = generate_chunk_results(valid_articles, args.query)
 
+    if not chunk_results:
+        sys.exit("[WARN] No chunk results generated.")
+
+    # ── STEP 2: Merge all chunk results into one ──────────────────────────────
+    raw_response = merge_chunk_results(chunk_results, args.query)
+
+    if not raw_response:
+        sys.exit("[WARN] Empty response from merge step.")
+
+    # ── STEP 3: Parse + validate ──────────────────────────────────────────────
     raw_items               = parse_llm_response(raw_response)
     modality_items, dropped = validate_items(raw_items)
 
+    print(f"\n[INFO] Chunk results         : {len(chunk_results)}")
     print(f"[INFO] Raw items parsed      : {len(raw_items)}")
     print(f"[INFO] Passed validation     : {len(modality_items)}")
     if dropped:
         print(f"[WARN] Dropped bad items     : {dropped}")
 
+    # ── STEP 4: Write output ──────────────────────────────────────────────────
     output_data = build_output(modality_items, args.query, len(valid_articles), dropped)
     out_path    = Path(args.output)
 
