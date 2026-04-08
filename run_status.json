@@ -1,8 +1,7 @@
 {
-  "stage": "complete",
-  "modality": "Molecular Glues",
-  "keyword": "molecularglue",
-  "last_updated": "2026-04-07 14:06:18",
-  "briefs_ready": true,
-  "links_processed": 12
+  "stage": "done_no_articles",
+  "modality": "Monoclonal Antibodies",
+  "keyword": "monoclonal",
+  "last_updated": "2026-04-08 04:27:35",
+  "links_processed": 0
 }
