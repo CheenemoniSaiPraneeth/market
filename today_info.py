@@ -1,6 +1,5 @@
 import json
 import os
-import re
 from datetime import datetime
 
 INPUT_FILE = "companies_suii.json"
@@ -10,58 +9,14 @@ TODAY_FILE = "charith.json"
 TODAY_DATE = datetime.now().strftime("%Y-%m-%d")
 
 # ---------------------------------
-# ARTICLE STRUCTURE CHECK
-# ---------------------------------
-
-def is_article_url(url):
-    url_lower = url.lower()
-
-    # Reject obvious pagination patterns
-    if "?page=" in url_lower:
-        return False
-
-    # Reject URLs ending with page numbers like /18 or /0 or /1
-    if re.search(r"/\d+/?$", url_lower):
-        return False
-
-    # Reject PDF links
-    if url_lower.endswith(".pdf"):
-        return False
-
-    # Reject index-style URLs
-    bad_patterns = [
-        "/press-releases",
-        "/news",
-        "/events",
-        "/about",
-        "/esg",
-        "/announcements",
-        "/presentations"
-    ]
-
-    # If URL ends exactly with these (no slug), reject
-    for pattern in bad_patterns:
-        if url_lower.rstrip("/").endswith(pattern):
-            return False
-
-    # Require decent slug length
-    last_part = url_lower.rstrip("/").split("/")[-1]
-    if len(last_part) < 15:
-        return False
-
-    return True
-
-# ---------------------------------
 # LOAD HARVESTED
 # ---------------------------------
-
 with open(INPUT_FILE, "r", encoding="utf-8") as f:
     harvested = json.load(f)
 
 # ---------------------------------
 # LOAD MASTER
 # ---------------------------------
-
 if os.path.exists(MASTER_FILE):
     with open(MASTER_FILE, "r", encoding="utf-8") as f:
         master_data = json.load(f)
@@ -75,7 +30,6 @@ today_new = []
 # ---------------------------------
 # PROCESS
 # ---------------------------------
-
 for company_block in harvested:
 
     company = company_block.get("company")
@@ -88,31 +42,27 @@ for company_block in harvested:
         if not url:
             continue
 
+        # ONLY CHECK: if already exists
         if url in master_urls:
             continue
-
-        article_flag = is_article_url(url)
 
         record = {
             "company": company,
             "url": url,
             "score": score,
-            "date_added": TODAY_DATE,
-            "article_like": article_flag
+            "date_added": TODAY_DATE
         }
 
-        # Always store in master
+        # Add to master
         master_data.append(record)
         master_urls.add(url)
 
-        # Only article-like go to today's delta
-        if article_flag:
-            today_new.append(record)
+        # Add to today's file
+        today_new.append(record)
 
 # ---------------------------------
 # SAVE FILES
 # ---------------------------------
-
 with open(MASTER_FILE, "w", encoding="utf-8") as f:
     json.dump(master_data, f, indent=4)
 
@@ -120,5 +70,5 @@ with open(TODAY_FILE, "w", encoding="utf-8") as f:
     json.dump(today_new, f, indent=4)
 
 print("\nDelta Engine Complete")
-print("New total URLs added:", len(today_new))
+print("New URLs added today:", len(today_new))
 print("Total master URLs:", len(master_data))
