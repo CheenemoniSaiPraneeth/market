@@ -41,7 +41,7 @@ MODEL           = "qwen/qwen3.5-122b-a10b"
 MAX_RETRIES     = 3
 BACKOFF_BASE    = 1      # seconds — attempt 1: no wait, 2: 1s, 3: 2s, 4: 4s
 REQUEST_TIMEOUT = 180    # seconds per attempt
-CHUNK_SIZE      = 3     # articles per chunk
+CHUNK_SIZE      = 2     # articles per chunk
 
 BRIEFS_HISTORY_FILE = "briefs_history.json"
 
