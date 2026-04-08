@@ -2,10 +2,13 @@
   "stage": "all_complete",
   "modality": "All Modalities",
   "keyword": "all",
-  "last_updated": "2026-04-08 05:50:51",
+  "last_updated": "2026-04-08 06:13:41",
   "results": {
-    "Monoclonal Antibodies": "No articles"
+    "Bispecific Antibodies": "No articles",
+    "Monoclonal Antibodies": "OK",
+    "Molecular Glues": "No articles",
+    "Gene Editing": "No articles"
   },
-  "modalities_run": 1,
+  "modalities_run": 4,
   "briefs_ready": true
 }
