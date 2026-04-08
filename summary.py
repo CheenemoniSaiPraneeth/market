@@ -619,6 +619,10 @@ def parse_args():
         "--no-history", action="store_true",
         help="Skip writing to briefs_history.json"
     )
+    p.add_argument(
+        "--modality", "-m", default=None,
+        help="Modality label for tagging (e.g. 'Bispecific Antibodies')"
+    )
     return p.parse_args()
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
