@@ -98,8 +98,14 @@ def build_graph(data: dict) -> dict:
     modality_name = m.get("modality_name", "Market")
 
     # Build meta summary to pass back to frontend
+    # ── pick up date tags injected by main.py ─────────────────────────────────
+    run_date       = m.get("run_date", "")
+    modality_label = m.get("modality_label", modality_name)
+
     meta = {
         "modality_name":    modality_name,
+        "modality_label":   modality_label,
+        "run_date":         run_date,
         "current_state":    evol.get("current_state", ""),
         "next_direction":   evol.get("next_direction", ""),
         "trend":            grow.get("trend", ""),
@@ -165,7 +171,8 @@ def build_graph(data: dict) -> dict:
         modality_name, "insight",
         current[:400],
         root_tags,
-        {"extra_type": "root", "next_direction": evol.get("next_direction", "")}
+        {"extra_type": "root", "next_direction": evol.get("next_direction", ""),
+         "run_date": run_date, "modality_label": modality_label}
     )
 
     # ── 2. GROWTH TRAJECTORY ─────────────────────────────────────────────────
