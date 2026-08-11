@@ -8,7 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
-
+#namaste 
 INPUT_FILE = "company.json"
 OUTPUT_FILE = "companies_suii.json"
 
